@@ -18,10 +18,3 @@ export interface Part {
   description: string;
   slides: Slide[];
 }
-
-export interface NavItem {
-  id: string;
-  label: string;
-  type: 'part' | 'slide';
-  parentId?: string;
-}

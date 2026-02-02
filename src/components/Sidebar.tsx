@@ -1,107 +1,132 @@
-import type { Part } from '@/types';
-import { ChevronRight, ChevronDown, Ship, Anchor, Users, MessageSquare, Globe, Shield } from 'lucide-react';
 import { useState } from 'react';
-import { cn } from '@/lib/utils';
+import { ChevronDown, ChevronRight, Menu, X, Ship } from 'lucide-react';
+import type { Slide } from '../types';
+import { cn } from '../lib/utils';
 
 interface SidebarProps {
-  parts: Part[];
-  currentSlideId: string | null;
+  slides: Slide[];
+  currentSlideId: string;
   onSlideSelect: (slideId: string) => void;
+  isOpen: boolean;
+  onToggle: () => void;
 }
 
-const partIcons: Record<string, React.ReactNode> = {
-  part1: <Ship className="w-4 h-4" />,
-  part2: <Users className="w-4 h-4" />,
-  part3: <Anchor className="w-4 h-4" />,
-  part4: <MessageSquare className="w-4 h-4" />,
-  part5: <Globe className="w-4 h-4" />,
-  part6: <Shield className="w-4 h-4" />,
-};
+interface PartGroup {
+  part: string;
+  slides: Slide[];
+}
 
-export function Sidebar({ parts, currentSlideId, onSlideSelect }: SidebarProps) {
-  const [expandedParts, setExpandedParts] = useState<Set<string>>(new Set(['part1']));
+export function Sidebar({ slides, currentSlideId, onSlideSelect, isOpen, onToggle }: SidebarProps) {
+  const [expandedParts, setExpandedParts] = useState<Set<string>>(() => {
+    // Start with all parts expanded
+    const parts = new Set(slides.map(s => s.part));
+    return parts;
+  });
 
-  const togglePart = (partId: string) => {
+  // Group slides by part
+  const partGroups: PartGroup[] = slides.reduce((acc, slide) => {
+    const existing = acc.find(g => g.part === slide.part);
+    if (existing) {
+      existing.slides.push(slide);
+    } else {
+      acc.push({ part: slide.part, slides: [slide] });
+    }
+    return acc;
+  }, [] as PartGroup[]);
+
+  const togglePart = (part: string) => {
     setExpandedParts(prev => {
       const next = new Set(prev);
-      if (next.has(partId)) {
-        next.delete(partId);
+      if (next.has(part)) {
+        next.delete(part);
       } else {
-        next.add(partId);
+        next.add(part);
       }
       return next;
     });
   };
 
   return (
-    <div className="h-full flex flex-col">
-      {/* Header */}
-      <div className="p-4 border-b border-slate-200 bg-gradient-to-r from-blue-900 to-blue-800">
-        <h1 className="text-white font-bold text-lg leading-tight">
-          Unit 23 Storyboard
-        </h1>
-        <p className="text-blue-200 text-xs mt-1">
-          Introduction to Yachting
-        </p>
-      </div>
+    <>
+      {/* Mobile Toggle Button */}
+      <button
+        onClick={onToggle}
+        className="fixed top-4 left-4 z-50 lg:hidden bg-navy-900 text-white p-2 rounded-md shadow-lg"
+      >
+        {isOpen ? <X size={24} /> : <Menu size={24} />}
+      </button>
 
-      {/* Navigation */}
-      <div className="flex-1 overflow-y-auto py-2">
-        {parts.map((part) => (
-          <div key={part.id} className="mb-1">
-            {/* Part Header */}
-            <button
-              onClick={() => togglePart(part.id)}
-              className={cn(
-                "w-full flex items-center gap-2 px-3 py-2 text-sm font-medium transition-colors",
-                "hover:bg-slate-100 text-slate-700"
-              )}
-            >
-              {expandedParts.has(part.id) ? (
-                <ChevronDown className="w-4 h-4 text-slate-400" />
-              ) : (
-                <ChevronRight className="w-4 h-4 text-slate-400" />
-              )}
-              <span className="text-blue-600">
-                {partIcons[part.id]}
-              </span>
-              <span className="truncate">{part.title}</span>
-            </button>
+      {/* Sidebar */}
+      <div
+        className={cn(
+          "fixed inset-y-0 left-0 z-40 w-80 bg-navy-900 text-white overflow-y-auto transition-transform duration-300 ease-in-out",
+          isOpen ? "translate-x-0" : "-translate-x-full",
+          "lg:translate-x-0 lg:static lg:block"
+        )}
+      >
+        <div className="p-4 border-b border-navy-800">
+          <div className="flex items-center gap-2 mb-2">
+            <Ship className="text-gold-400" size={24} />
+            <h1 className="text-lg font-bold">Unit 23</h1>
+          </div>
+          <p className="text-xs text-gray-400">Introduction to Yachting Specifications</p>
+        </div>
 
-            {/* Slides */}
-            {expandedParts.has(part.id) && (
-              <div className="ml-4 border-l border-slate-200">
-                {part.slides.map((slide) => (
-                  <button
-                    key={slide.id}
-                    onClick={() => onSlideSelect(slide.id)}
-                    className={cn(
-                      "w-full text-left px-4 py-2 text-sm transition-colors",
-                      currentSlideId === slide.id
-                        ? "bg-blue-50 text-blue-700 border-r-2 border-blue-600"
-                        : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                    )}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-mono text-slate-400">
+        <nav className="p-2">
+          {partGroups.map((group, partIndex) => (
+            <div key={group.part} className="mb-2">
+              <button
+                onClick={() => togglePart(group.part)}
+                className="w-full flex items-center justify-between p-2 rounded hover:bg-navy-800 transition-colors"
+              >
+                <span className="text-sm font-medium text-gold-400">
+                  Part {partIndex + 1}
+                </span>
+                {expandedParts.has(group.part) ? (
+                  <ChevronDown size={16} />
+                ) : (
+                  <ChevronRight size={16} />
+                )}
+              </button>
+
+              {expandedParts.has(group.part) && (
+                <div className="ml-2 mt-1 space-y-1">
+                  {group.slides.map((slide) => (
+                    <button
+                      key={slide.id}
+                      onClick={() => {
+                        onSlideSelect(slide.id);
+                        if (window.innerWidth < 1024) {
+                          onToggle();
+                        }
+                      }}
+                      className={cn(
+                        "w-full text-left p-2 rounded text-sm transition-colors",
+                        currentSlideId === slide.id
+                          ? "bg-gold-400 text-navy-900 font-medium"
+                          : "text-gray-300 hover:bg-navy-800 hover:text-white"
+                      )}
+                    >
+                      <span className="inline-block w-6 text-xs opacity-70">
                         {slide.slideNumber}
                       </span>
-                      <span className="truncate">{slide.sectionTitle}</span>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
+                      <span className="truncate">{slide.headline}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </nav>
       </div>
 
-      {/* Footer */}
-      <div className="p-3 border-t border-slate-200 bg-slate-50">
-        <p className="text-xs text-slate-500 text-center">
-          21 Slides • 6 Parts • Rise 360
-        </p>
-      </div>
-    </div>
+      {/* Overlay for mobile */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-30 lg:hidden"
+          onClick={onToggle}
+        />
+      )}
+    </>
   );
 }

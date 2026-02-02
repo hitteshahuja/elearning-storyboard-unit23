@@ -1,326 +1,203 @@
-import type { Slide } from '@/types';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { 
-  Mic, 
-  MousePointer, 
-  Image as ImageIcon, 
-  ClipboardCheck, 
-  MessageCircle,
-  ChevronLeft,
-  ChevronRight,
-  BookOpen
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { parts } from '@/data/slides';
+import { Mic, Image, MessageSquare, Play, MousePointer } from 'lucide-react';
+import type { Slide } from '../types';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { Badge } from './ui/badge';
 
 interface SlideViewProps {
   slide: Slide;
 }
 
 export function SlideView({ slide }: SlideViewProps) {
-  // Get prev/next slides
-  const allSlides = parts.flatMap(p => p.slides);
-  const currentIndex = allSlides.findIndex(s => s.id === slide.id);
-  const prevSlide = currentIndex > 0 ? allSlides[currentIndex - 1] : null;
-  const nextSlide = currentIndex < allSlides.length - 1 ? allSlides[currentIndex + 1] : null;
-
-  const navigateToSlide = (slideId: string) => {
-    const event = new CustomEvent('navigateToSlide', { detail: slideId });
-    window.dispatchEvent(event);
-  };
-
-  // Parse content markdown
-  const renderContent = (content: string): React.ReactNode[] => {
+  // Simple markdown-like parser for content
+  const parseContent = (content: string): React.ReactNode[] => {
     const lines = content.split('\n');
     const elements: React.ReactNode[] = [];
-    let listItems: string[] = [];
-    let tableRows: string[] = [];
+    let currentList: string[] = [];
 
     const flushList = () => {
-      if (listItems.length > 0) {
+      if (currentList.length > 0) {
         elements.push(
-          <ul key={`list-${elements.length}`} className="list-disc pl-6 space-y-1 my-4">
-            {listItems.map((item, i) => (
-              <li key={i} className="text-slate-700">{item.replace(/^[\-\*]\s*/, '')}</li>
+          <ul key={`list-${elements.length}`} className="list-disc pl-5 space-y-1 mb-4">
+            {currentList.map((item, i) => (
+              <li key={i} className="text-gray-700">{item.replace(/^[-*]\s*/, '')}</li>
             ))}
           </ul>
         );
-        listItems = [];
+        currentList = [];
       }
     };
 
-    const flushTable = () => {
-      if (tableRows.length > 2) {
-        const headers = tableRows[0].split('|').filter(c => c.trim()).map(c => c.trim());
-        const dataRows = tableRows.slice(2).filter(r => r.includes('|') && !r.match(/^\s*[-|]+\s*$/));
-        
+    lines.forEach((line, index) => {
+      const trimmed = line.trim();
+      
+      if (!trimmed) {
+        flushList();
+        return;
+      }
+
+      // Header lines (ALL CAPS or ending with :)
+      if ((trimmed === trimmed.toUpperCase() && trimmed.length > 3 && !trimmed.startsWith('-')) || 
+          (trimmed.endsWith(':') && trimmed.length < 50)) {
+        flushList();
         elements.push(
-          <div key={`table-${elements.length}`} className="overflow-x-auto my-4">
-            <table className="min-w-full border-collapse border border-slate-300">
-              <thead>
-                <tr className="bg-slate-100">
-                  {headers.map((h, i) => (
-                    <th key={i} className="border border-slate-300 px-4 py-2 text-left text-sm font-semibold text-slate-700">
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {dataRows.map((row, ri) => {
-                  const cells = row.split('|').filter(c => c.trim()).map(c => c.trim());
-                  return (
-                    <tr key={ri} className={ri % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                      {cells.map((cell, ci) => (
-                        <td key={ci} className="border border-slate-300 px-4 py-2 text-sm text-slate-700">
-                          {cell}
-                        </td>
-                      ))}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <h4 key={index} className="font-bold text-navy-900 mt-4 mb-2">
+            {trimmed}
+          </h4>
+        );
+      }
+      // List items
+      else if (trimmed.startsWith('-') || trimmed.startsWith('*')) {
+        currentList.push(trimmed);
+      }
+      // Numbered items
+      else if (/^\d+\./.test(trimmed)) {
+        flushList();
+        elements.push(
+          <div key={index} className="flex gap-2 mb-2">
+            <span className="font-medium text-navy-900 min-w-[1.5rem]">
+              {trimmed.match(/^\d+/)?.[0]}.
+            </span>
+            <span className="text-gray-700">{trimmed.replace(/^\d+\.\s*/, '')}</span>
           </div>
         );
-        tableRows = [];
       }
-    };
-
-    lines.forEach((line, idx) => {
-      const trimmed = line.trim();
-
-      // Handle code blocks
-      if (trimmed.startsWith('```')) {
-        flushList();
-        flushTable();
-        return;
-      }
-
-      // Handle tables
-      if (trimmed.startsWith('|')) {
-        tableRows.push(trimmed);
-        return;
-      } else if (tableRows.length > 0) {
-        flushTable();
-      }
-
-      // Handle headings
-      if (trimmed.startsWith('## ')) {
+      // Regular paragraph
+      else {
         flushList();
         elements.push(
-          <h2 key={`h2-${idx}`} className="text-xl font-bold text-slate-800 mt-6 mb-3">
-            {trimmed.replace('## ', '')}
-          </h2>
+          <p key={index} className="text-gray-700 mb-3 leading-relaxed">
+            {trimmed}
+          </p>
         );
-        return;
       }
-
-      if (trimmed.startsWith('### ')) {
-        flushList();
-        elements.push(
-          <h3 key={`h3-${idx}`} className="text-lg font-semibold text-slate-700 mt-5 mb-2">
-            {trimmed.replace('### ', '')}
-          </h3>
-        );
-        return;
-      }
-
-      // Handle blockquotes
-      if (trimmed.startsWith('> ')) {
-        flushList();
-        elements.push(
-          <blockquote key={`bq-${idx}`} className="border-l-4 border-amber-400 pl-4 py-2 my-4 bg-amber-50 italic text-slate-600">
-            {trimmed.replace('> ', '')}
-          </blockquote>
-        );
-        return;
-      }
-
-      // Handle horizontal rules
-      if (trimmed === '---') {
-        flushList();
-        elements.push(<hr key={`hr-${idx}`} className="my-6 border-slate-200" />);
-        return;
-      }
-
-      // Handle list items
-      if (trimmed.match(/^[\-\*]\s/)) {
-        listItems.push(trimmed);
-        return;
-      } else if (listItems.length > 0 && trimmed === '') {
-        flushList();
-        return;
-      }
-
-      // Handle empty lines
-      if (trimmed === '') {
-        return;
-      }
-
-      // Handle bold text
-      let processedLine = trimmed;
-      processedLine = processedLine.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-      processedLine = processedLine.replace(/__(.*?)__/g, '<strong>$1</strong>');
-      
-      // Handle italic
-      processedLine = processedLine.replace(/\*(.*?)\*/g, '<em>$1</em>');
-      processedLine = processedLine.replace(/_(.*?)_/g, '<em>$1</em>');
-
-      flushList();
-      elements.push(
-        <p 
-          key={`p-${idx}`} 
-          className="text-slate-700 my-3 leading-relaxed"
-          dangerouslySetInnerHTML={{ __html: processedLine }}
-        />
-      );
     });
 
     flushList();
-    flushTable();
-
     return elements;
   };
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="space-y-6">
       {/* Slide Header */}
-      <div className="mb-6">
-        <div className="flex items-center gap-3 mb-2">
-          <Badge variant="secondary" className="text-sm font-mono">
-            {slide.slideNumber}
-          </Badge>
-          <span className="text-slate-500 text-sm">{slide.sectionTitle}</span>
+      <div className="border-b pb-4">
+        <div className="flex items-center gap-2 mb-2">
+          <Badge variant="secondary">Slide {slide.slideNumber}</Badge>
+          <Badge variant="outline">{slide.part}</Badge>
         </div>
-        <h1 className="text-3xl font-bold text-slate-900">{slide.headline}</h1>
+        <h1 className="text-3xl font-bold text-navy-900">{slide.headline}</h1>
+        <p className="text-gray-500 mt-1">{slide.sectionTitle}</p>
       </div>
 
       {/* Main Content Grid */}
-      <div className="space-y-6">
-        {/* VO Intent & Interaction */}
-        <div className="grid md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Left Column - Content */}
+        <div className="space-y-6">
+          {/* Course Content */}
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-slate-500 flex items-center gap-2">
-                <Mic className="w-4 h-4" />
-                VO Intent
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-slate-700">{slide.voIntent}</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-slate-500 flex items-center gap-2">
-                <MousePointer className="w-4 h-4" />
-                Interaction Type
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-slate-700">{slide.interaction}</p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Course Content */}
-        {slide.content && (
-          <Card className="border-purple-200 bg-purple-50/30">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-purple-700 flex items-center gap-2">
-                <BookOpen className="w-4 h-4" />
+              <CardTitle className="text-lg flex items-center gap-2">
+                <span className="w-8 h-8 rounded-full bg-navy-900 text-white flex items-center justify-center text-sm">
+                  {slide.slideNumber}
+                </span>
                 Course Content
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="prose prose-slate max-w-none">
-                {renderContent(slide.content)}
+              <div className="prose prose-sm max-w-none">
+                {parseContent(slide.content)}
               </div>
             </CardContent>
           </Card>
-        )}
 
-        {/* Image Placeholder */}
-        <Card className="border-amber-200 bg-amber-50/50">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-amber-700 flex items-center gap-2">
-              <ImageIcon className="w-4 h-4" />
-              Visual Placeholder
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="bg-amber-100 border-2 border-dashed border-amber-300 rounded-lg p-8 text-center">
-              <ImageIcon className="w-12 h-12 text-amber-400 mx-auto mb-3" />
-              <p className="text-amber-800 font-medium">{slide.imagePlaceholder}</p>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Assessment (if present) */}
-        {slide.assessment && (
-          <Card className="border-blue-200 bg-blue-50/50">
+          {/* VO Intent */}
+          <Card className="bg-blue-50 border-blue-200">
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-blue-700 flex items-center gap-2">
-                <ClipboardCheck className="w-4 h-4" />
-                Assessment Placeholder
+              <CardTitle className="text-lg flex items-center gap-2 text-blue-900">
+                <Mic size={20} />
+                VO Intent
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="bg-blue-100 rounded-lg p-4">
-                <pre className="text-blue-800 text-sm whitespace-pre-wrap font-sans">
-                  {slide.assessment}
-                </pre>
+              <p className="text-blue-800">{slide.voIntent}</p>
+            </CardContent>
+          </Card>
+
+          {/* Voiceover Script */}
+          <Card className="bg-amber-50 border-amber-200">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg flex items-center gap-2 text-amber-900">
+                <Play size={20} />
+                Voiceover Script
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-amber-800 italic">"{slide.voiceoverScript}"</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Right Column - Meta Info */}
+        <div className="space-y-6">
+          {/* Interaction Type */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <MousePointer size={20} />
+                Interaction Type
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Badge className="text-base px-3 py-1">{slide.interaction}</Badge>
+            </CardContent>
+          </Card>
+
+          {/* Image Placeholder */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Image size={20} />
+                Visual Placeholder
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="bg-gray-100 border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+                <Image className="mx-auto mb-3 text-gray-400" size={48} />
+                <p className="text-gray-600 text-sm">{slide.imagePlaceholder}</p>
               </div>
             </CardContent>
           </Card>
-        )}
 
-        {/* Voiceover Script */}
-        <Card className="border-emerald-200 bg-emerald-50/50">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-emerald-700 flex items-center gap-2">
-              <MessageCircle className="w-4 h-4" />
-              Voiceover Script
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="bg-emerald-100 rounded-lg p-4">
-              <p className="text-emerald-800 leading-relaxed">
-                {slide.voiceoverScript}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+          {/* Assessment */}
+          {slide.assessment && (
+            <Card className="bg-green-50 border-green-200">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg flex items-center gap-2 text-green-900">
+                  <MessageSquare size={20} />
+                  Assessment
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-green-800">{slide.assessment}</p>
+              </CardContent>
+            </Card>
+          )}
 
-      {/* Navigation */}
-      <div className="flex justify-between items-center mt-8 pt-6 border-t border-slate-200">
-        <Button
-          variant="outline"
-          disabled={!prevSlide}
-          onClick={() => prevSlide && navigateToSlide(prevSlide.id)}
-          className="flex items-center gap-2"
-        >
-          <ChevronLeft className="w-4 h-4" />
-          {prevSlide ? prevSlide.sectionTitle : 'Previous'}
-        </Button>
-
-        <span className="text-sm text-slate-500">
-          Slide {currentIndex + 1} of {allSlides.length}
-        </span>
-
-        <Button
-          variant="outline"
-          disabled={!nextSlide}
-          onClick={() => nextSlide && navigateToSlide(nextSlide.id)}
-          className="flex items-center gap-2"
-        >
-          {nextSlide ? nextSlide.sectionTitle : 'Next'}
-          <ChevronRight className="w-4 h-4" />
-        </Button>
+          {/* Slide Info */}
+          <Card className="bg-gray-50">
+            <CardContent className="pt-6">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="text-gray-500">Slide ID:</span>
+                  <p className="font-mono text-navy-900">{slide.id}</p>
+                </div>
+                <div>
+                  <span className="text-gray-500">Part:</span>
+                  <p className="text-navy-900">{slide.part}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );
